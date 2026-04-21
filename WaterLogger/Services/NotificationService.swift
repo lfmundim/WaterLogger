@@ -1,14 +1,32 @@
 import Foundation
 import UserNotifications
 
+/// An `actor` that owns all interaction with `UNUserNotificationCenter`.
+///
+/// Using `actor` ensures that only one scheduling operation runs at a time,
+/// preventing a race where two concurrent calls could both remove the pending
+/// notification and then both add a new one (potentially scheduling two reminders).
+///
+/// The adaptive scheduling algorithm is intentionally exposed as a `static` pure
+/// function (`nextReminderInterval`) so it can be unit-tested without any
+/// system dependencies.
 actor NotificationService {
+    /// The shared singleton. Use this everywhere instead of creating new instances.
     static let shared = NotificationService()
 
     private let center = UNUserNotificationCenter.current()
+    /// Stable identifier used for the single pending reminder so it can be
+    /// cancelled and replaced atomically on every re-schedule.
     private let reminderIdentifier = "water.reminder.next"
 
     // MARK: - Authorization
 
+    /// Requests permission to display alerts, play sounds, and badge the app icon.
+    ///
+    /// Called lazily before the first scheduling attempt. If the user previously
+    /// denied notifications the system will not show the prompt again; the method
+    /// returns and scheduling proceeds anyway — the notification will simply not
+    /// be delivered.
     func requestAuthorizationIfNeeded() async {
         _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
     }
@@ -16,6 +34,28 @@ actor NotificationService {
     // MARK: - Scheduling
 
     /// Calculates the next reminder fire date and schedules it, or cancels if goal is met / outside window.
+    ///
+    /// This method is the main entry point for adaptive scheduling. Call it:
+    /// - After every intake log
+    /// - When the app returns to the foreground
+    /// - After deleting an entry
+    ///
+    /// **Algorithm (from CLAUDE.md):**
+    /// ```
+    /// remainingMl    = goalMl − totalEffectiveMlToday
+    /// hoursLeft      = hoursUntilWindowEnd  (0 if past end)
+    /// intervalHours  = remainingMl / (goalMl / totalWindowHours)
+    /// fireDate       = now + clamp(intervalHours, 30 min, 2 h)
+    /// ```
+    /// If the goal is already met, the window has ended, or `fireDate` falls
+    /// after the window end, the pending notification is cancelled and nothing
+    /// is scheduled.
+    ///
+    /// - Parameters:
+    ///   - totalEffectiveMlToday: Sum of `effectiveMl` for all entries logged so far today.
+    ///   - goalMl: The user's daily target from `AppSettings.dailyGoalMl`.
+    ///   - windowStartMinutes: Minutes after midnight when reminders may start.
+    ///   - windowEndMinutes: Minutes after midnight when reminders must stop.
     func scheduleNext(
         totalEffectiveMlToday: Double,
         goalMl: Double,
@@ -78,6 +118,10 @@ actor NotificationService {
     }
 
     /// Cancel the pending reminder without scheduling a new one.
+    ///
+    /// Called when the goal is already met for the day or the user disables
+    /// notifications. After calling this, no reminder will fire until
+    /// `scheduleNext(...)` is called again.
     func cancelPending() {
         center.removePendingNotificationRequests(withIdentifiers: [reminderIdentifier])
     }
@@ -85,6 +129,18 @@ actor NotificationService {
     // MARK: - Pure scheduling logic (testable without UNUserNotificationCenter)
 
     /// Returns the interval in hours for the next reminder, or nil if no reminder should be scheduled.
+    ///
+    /// This is a `static` pure function with no side effects, making it easy to
+    /// unit-test without mocking `UNUserNotificationCenter`. The actual scheduling
+    /// method `scheduleNext(...)` delegates the interval calculation to this function.
+    ///
+    /// - Parameters:
+    ///   - totalEffectiveMlToday: Hydration-adjusted intake logged so far today (ml).
+    ///   - goalMl: User's daily hydration goal (ml).
+    ///   - totalWindowHours: Total length of the active reminder window in hours.
+    ///   - hoursLeftInWindow: Hours remaining until the window closes (0 if past end).
+    /// - Returns: The clamped interval in hours (`[0.5, 2.0]`), or `nil` if the
+    ///   goal is met, the window is closed, or any input is invalid.
     static func nextReminderInterval(
         totalEffectiveMlToday: Double,
         goalMl: Double,

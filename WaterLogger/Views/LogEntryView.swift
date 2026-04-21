@@ -12,6 +12,8 @@ struct LogEntryView: View {
     @State private var selectedPresetMl: Double? = 250
     @State private var customAmountText: String = ""
     @State private var useCustomAmount = false
+    @State private var isToday = true
+    @State private var entryDate = Date()
 
     private var amountMl: Double {
         if useCustomAmount {
@@ -38,10 +40,19 @@ struct LogEntryView: View {
                         }
                     }
                 }
+                
+                Section(String(localized: "Date & Time")) {
+                    Toggle(String(localized: "Today"), isOn: $isToday)
+                    if !isToday {
+                        HStack {
+                            DatePicker(String(localized: "Date"), selection: $entryDate, displayedComponents: [.date, .hourAndMinute])
+                        }
+                    }
+                }
 
                 Section {
                     Button(action: confirm) {
-                        Label(String(localized: "Log intake"), systemImage: "plus.circle.fill")
+                        Label(String(localized: "Log intake"), systemImage: "checkmark")
                             .frame(maxWidth: .infinity)
                     }
                     .disabled(amountMl <= 0)
@@ -133,6 +144,7 @@ struct LogEntryView: View {
         guard amountMl > 0 else { return }
         Task {
             await viewModel.logIntake(
+                date: entryDate,
                 amountMl: amountMl,
                 beverageType: selectedBeverage,
                 context: modelContext
