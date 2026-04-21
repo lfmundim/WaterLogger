@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>WaterLogger reads your water intake data from Health to keep your progress in sync across apps and devices.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>WaterLogger saves your water intake entries to Health so other apps and your Apple Watch stay up to date.</string>
+</dict>
+</plist>
