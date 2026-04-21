@@ -52,7 +52,7 @@ struct LogEntryView: View {
 
                 Section {
                     Button(action: confirm) {
-                        Label(String(localized: "Log intake"), systemImage: "checkmark")
+                        Label(String(localized: "Log intake"), systemImage: "checkmark.circle.badge.plus")
                             .frame(maxWidth: .infinity)
                     }
                     .disabled(amountMl <= 0)
@@ -142,9 +142,12 @@ struct LogEntryView: View {
 
     private func confirm() {
         guard amountMl > 0 else { return }
+        // Use the current time when logging today so the timestamp reflects when the
+        // user actually tapped confirm, not when the sheet was first opened.
+        let date = isToday ? Date.now : entryDate
         Task {
             await viewModel.logIntake(
-                date: entryDate,
+                date: date,
                 amountMl: amountMl,
                 beverageType: selectedBeverage,
                 context: modelContext
