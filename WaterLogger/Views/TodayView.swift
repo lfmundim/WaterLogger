@@ -3,168 +3,275 @@ import SwiftData
 
 struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var viewModel = TodayViewModel()
-    @State private var showingLogEntry = false
+    @Environment(TodayViewModel.self) private var viewModel
+    @State private var entryToDelete: IntakeEntry?
+    @State private var showLog = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    progressSection
-                    entryList
-                }
-                .padding()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                headerRow
+                    .padding(.bottom, 28)
+
+                ProgressRingView(
+                    progress: viewModel.progress,
+                    consumed: Int(viewModel.totalEffectiveMl),
+                    goal: Int(viewModel.settings.dailyGoalMl)
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 28)
+
+                statusChips
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 36)
+
+                intakeLogSection
             }
-            .navigationTitle(String(localized: "Today"))
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingLogEntry = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+            .padding(.horizontal, 18)
+            .padding(.top, 12)
+        }
+        .scrollIndicators(.hidden)
+        .task { await viewModel.load(context: modelContext) }
+        .refreshable { await viewModel.load(context: modelContext) }
+        .sheet(isPresented: $showLog) {
+            LogEntryView(viewModel: viewModel)
+                .presentationDetents([.height(580)])
+                .presentationCornerRadius(30)
+                .presentationBackground(Color(hex: "090e1c"))
+                .presentationDragIndicator(.hidden)
+        }
+        .alert(
+            "Delete Entry?",
+            isPresented: Binding(
+                get: { entryToDelete != nil },
+                set: { if !$0 { entryToDelete = nil } }
+            )
+        ) {
+            Button("Delete", role: .destructive) {
+                if let entry = entryToDelete {
+                    Task { await viewModel.deleteEntry(entry, context: modelContext) }
+                }
+                entryToDelete = nil
+            }
+            Button("Cancel", role: .cancel) { entryToDelete = nil }
+        } message: {
+            if let entry = entryToDelete {
+                Text("\(Int(entry.amountMl)) ml · \(String(localized: entry.beverageType.displayName))")
+            }
+        }
+    }
+
+    // MARK: - Header
+
+    private var headerRow: some View {
+        HStack {
+            Text("Today")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(.white)
+                .kerning(0.2)
+
+            Spacer()
+
+            // Glass + button — Apple Calendar/Passwords style
+            Button { showLog = true } label: {
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Circle()
+                                .fill(Color(red: 0.43, green: 0.43, blue: 0.47, opacity: 0.30))
+                        )
+                        .overlay(
+                            Circle()
+                                .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.5)
+                        )
+                        .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+                        .frame(width: 36, height: 36)
+
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Status chips
+
+    private var statusChips: some View {
+        HStack(spacing: 8) {
+            // Next reminder chip
+            if let date = viewModel.nextReminderDate {
+                let mins = max(Int(date.timeIntervalSinceNow / 60), 0)
+                if mins > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.55))
+                        Group {
+                            Text("Next in ") + Text("\(mins) min").foregroundColor(Color.iosBlue) + Text("")
+                        }
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.65))
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .glassCard(cornerRadius: 99)
                 }
             }
-            .sheet(isPresented: $showingLogEntry) {
-                LogEntryView(viewModel: viewModel, settings: viewModel.settings)
-            }
-            .task {
-                await viewModel.load(context: modelContext)
-            }
-            .refreshable {
-                await viewModel.load(context: modelContext)
-            }
-        }
-    }
 
-    // MARK: - Subviews
-
-    private var progressSection: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .stroke(Color(.systemFill), lineWidth: 16)
-                Circle()
-                    .trim(from: 0, to: viewModel.progress)
-                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 16, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.5), value: viewModel.progress)
-
-                VStack(spacing: 4) {
-                    Text("\(Int(viewModel.totalEffectiveMl))")
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                    Text("/ \(Int(viewModel.settings.dailyGoalMl)) ml")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 200, height: 200)
-
-            HStack(spacing: 24) {
-                statCard(
-                    title: String(localized: "Remaining"),
-                    value: "\(Int(viewModel.remainingMl)) ml",
-                    icon: "drop"
+            // Remaining / goal-reached chip
+            if viewModel.remainingMl == 0 {
+                Text("Goal reached!")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(hex: "34d399"))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .glassCard(cornerRadius: 99, tint: Color(hex: "34d399"))
+            } else {
+                (
+                    Text("\(Int(viewModel.remainingMl)) ")
+                        .foregroundColor(.white)
+                        .fontWeight(.bold)
+                    + Text("ml remaining")
+                        .foregroundColor(.white.opacity(0.5))
                 )
-                statCard(
-                    title: String(localized: "Next reminder"),
-                    value: nextReminderText,
-                    icon: "bell"
-                )
+                .font(.system(size: 13, weight: .medium))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .glassCard(cornerRadius: 99)
             }
         }
     }
 
-    private var nextReminderText: String {
-        guard let date = viewModel.nextReminderDate else {
-            return String(localized: "—")
-        }
-        return date.formatted(.dateTime.hour().minute())
-    }
+    // MARK: - Intake log
 
-    private func statCard(title: String, value: String, icon: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
+    private var intakeLogSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Section header
+            HStack {
+                Text("Intake Log")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .textCase(.uppercase)
+                    .kerning(0.9)
 
-    private var entryList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Today's Entries")
-                .font(.headline)
-                .padding(.horizontal, 4)
+                Spacer()
+
+                let count = viewModel.entries.count
+                Text("\(count) \(count == 1 ? "entry" : "entries")")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+            .padding(.horizontal, 2)
 
             if viewModel.entries.isEmpty {
-                Text("No entries yet. Tap + to log your first drink!")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                emptyState
             } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(viewModel.entries) { entry in
-                        entryRow(entry)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    Task {
-                                        await viewModel.deleteEntry(entry, context: modelContext)
-                                    }
-                                } label: {
-                                    Label(String(localized: "Delete"), systemImage: "trash")
-                                }
-                            }
-                    }
-                }
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                entriesList
+                summaryCard
             }
         }
     }
 
-    private func entryRow(_ entry: IntakeEntry) -> some View {
-        HStack {
-            Image(systemName: entry.beverageType.systemImage)
-                .foregroundStyle(.tint)
-                .frame(width: 28)
+    private var emptyState: some View {
+        VStack(spacing: 6) {
+            Text("Nothing logged yet.")
+                .font(.system(size: 15))
+                .foregroundStyle(.white.opacity(0.38))
+            Text("Tap + to log your first drink")
+                .font(.system(size: 15))
+                .foregroundStyle(Color.iosBlue.opacity(0.8))
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .padding(.horizontal, 20)
+        .glassCard()
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.beverageType.displayName)
-                    .font(.subheadline)
-                Text(entry.date, style: .time)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private var entriesList: some View {
+        // Entries are already newest-first from the view model
+        VStack(spacing: 8) {
+            ForEach(viewModel.entries) { entry in
+                entryCard(entry)
+            }
+        }
+    }
+
+    private var summaryCard: some View {
+        HStack {
+            Text("Remaining today")
+                .font(.system(size: 14))
+                .foregroundStyle(.white.opacity(0.5))
+            Spacer()
+            Text(viewModel.remainingMl > 0
+                 ? "\(Int(viewModel.remainingMl)) ml"
+                 : "Done!")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(viewModel.remainingMl > 0 ? Color.iosBlue : Color(hex: "34d399"))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .glassCard()
+        .padding(.top, 2)
+    }
+
+    // MARK: - Entry card
+
+    private func entryCard(_ entry: IntakeEntry) -> some View {
+        HStack(spacing: 12) {
+            BevDotView(
+                bevType: entry.beverageType,
+                size: 38,
+                emojiMode: viewModel.settings.emojiMode
+            )
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(String(localized: entry.beverageType.displayName))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text("\(Int(entry.amountMl)) ml")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.42))
+                }
+                if entry.beverageType.hydrationCoefficient < 1 {
+                    Text("\(Int(entry.effectiveMl)) ml effective (×\(entry.beverageType.hydrationCoefficient, specifier: "%.2g"))")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.32))
+                        .padding(.top, 1)
+                }
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(Int(entry.amountMl)) ml")
-                    .font(.subheadline).bold()
-                if entry.beverageType.hydrationCoefficient < 1 {
-                    Text("≈ \(Int(entry.effectiveMl)) ml effective")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .trailing, spacing: 5) {
+                Text(entry.date, style: .time)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.38))
+
+                Button { entryToDelete = entry } label: {
+                    Text("×")
+                        .font(.system(size: 17))
+                        .foregroundStyle(Color.red.opacity(0.45))
+                        .frame(width: 24, height: 20)
                 }
+                .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .glassCard(cornerRadius: 16)
     }
 }
 
 #Preview {
-    TodayView()
-        .modelContainer(for: [IntakeEntry.self, AppSettings.self], inMemory: true)
+    ZStack {
+        AppBackground()
+        TodayView()
+            .environment(TodayViewModel())
+    }
+    .modelContainer(for: [IntakeEntry.self, AppSettings.self], inMemory: true)
 }

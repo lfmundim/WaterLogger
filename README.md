@@ -14,13 +14,15 @@ If you drink a large glass at noon, your next reminder is pushed back accordingl
 
 ## Features
 
-- **Progress ring** — shows effective ml consumed vs. your daily goal
+- **Progress ring** — animated gradient arc with glow showing effective ml vs. your daily goal
 - **Beverage-aware hydration** — coffee, juice, soda, and herbal tea each carry a hydration coefficient so your progress reflects actual hydration, not just volume
 - **Adaptive reminders** — dynamic scheduling based on remaining goal and remaining window time
 - **HealthKit sync** — reads and writes `dietaryWater` samples; works seamlessly with Apple Watch and other apps
-- **7-day history** — bar chart with a goal line overlay, tappable bars for daily breakdowns
+- **7-day history** — bar chart with a goal line overlay, stat cards, and beverage breakdown
 - **Custom containers** — save your favourite cup/bottle sizes as presets
 - **Configurable active window** — set a wake-up and wind-down time; no reminders outside that range
+- **Emoji labels** — toggle between letter initials and emoji glyphs (💧🍵🍊☕) on beverage dots
+- **Liquid glass UI** — deep ocean dark theme with frosted glass panels, floating tab bar, and FAB circle-reveal animation
 
 ## Hydration coefficients
 

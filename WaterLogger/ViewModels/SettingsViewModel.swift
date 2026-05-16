@@ -18,6 +18,8 @@ final class SettingsViewModel {
     var windowEnd: Date   = Calendar.current.date(bySettingHour: 22, minute: 0, second: 0, of: .now) ?? .now
     /// The current list of quick-select container presets.
     var containerPresets: [ContainerPreset] = ContainerPreset.defaults
+    /// Mirror of `AppSettings.emojiMode` — whether beverage dots show emoji.
+    var emojiMode: Bool = false
 
     /// A reference to the persisted `AppSettings` record, kept for writing back on save.
     private var settingsModel: AppSettings?
@@ -37,6 +39,7 @@ final class SettingsViewModel {
             windowStart = existing.windowStartDate
             windowEnd   = existing.windowEndDate
             containerPresets = existing.containerPresets
+            emojiMode = existing.emojiMode
         } else {
             let newSettings = AppSettings()
             context.insert(newSettings)
@@ -62,6 +65,7 @@ final class SettingsViewModel {
         model.windowStartMinutes = (startComps.hour ?? 8) * 60 + (startComps.minute ?? 0)
         model.windowEndMinutes   = (endComps.hour ?? 22) * 60 + (endComps.minute ?? 0)
         model.containerPresets = containerPresets
+        model.emojiMode = emojiMode
         try? context.save()
     }
 
@@ -85,5 +89,9 @@ final class SettingsViewModel {
     /// - Parameter offsets: The positions to remove from `containerPresets`.
     func deletePresets(at offsets: IndexSet) {
         containerPresets.remove(atOffsets: offsets)
+    }
+
+    func movePresets(from source: IndexSet, to destination: Int) {
+        containerPresets.move(fromOffsets: source, toOffset: destination)
     }
 }
