@@ -21,50 +21,6 @@ extension Color {
     }
 }
 
-// MARK: - Glass card
-
-struct GlassCard: ViewModifier {
-    var cornerRadius: CGFloat = 20
-    var tintColor: Color?
-
-    func body(content: Content) -> some View {
-        content
-            .background { glassBackground }
-    }
-
-    private var glassBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(.ultraThinMaterial)
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(tintColor.map { $0.opacity(0.10) } ?? Color.white.opacity(0.075))
-            // Top refraction shine
-            VStack(spacing: 0) {
-                LinearGradient(
-                    colors: [.white.opacity(0.055), .clear],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(maxHeight: 60)
-                Spacer(minLength: 0)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-            // Border
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .strokeBorder(
-                    tintColor.map { $0.opacity(0.27) } ?? Color.white.opacity(0.14),
-                    lineWidth: 0.5
-                )
-        }
-        .shadow(color: .black.opacity(0.22), radius: 10, y: 4)
-    }
-}
-
-extension View {
-    func glassCard(cornerRadius: CGFloat = 20, tint: Color? = nil) -> some View {
-        modifier(GlassCard(cornerRadius: cornerRadius, tintColor: tint))
-    }
-}
-
 // MARK: - Beverage dot
 
 struct BevDotView: View {

@@ -3,7 +3,6 @@ import SwiftData
 
 struct LogEntryView: View {
     @Environment(\.modelContext) private var modelContext
-
     @Environment(\.dismiss) private var dismiss
     var viewModel: TodayViewModel
 
@@ -33,62 +32,60 @@ struct LogEntryView: View {
     }
 
     var body: some View {
-        sheetPanel
-    }
-
-    // MARK: - Sheet panel
-
-    private var sheetPanel: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Drag handle
-            HStack {
-                Spacer()
-                RoundedRectangle(cornerRadius: 99)
-                    .fill(Color.white.opacity(0.18))
-                    .frame(width: 36, height: 4)
-                Spacer()
-            }
-            .padding(.top, 14)
-            .padding(.bottom, 16)
-
-            // Title
-            Text("Log Intake")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(.white)
-                .kerning(-0.4)
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 0) {
+                // Beverage picker
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionLabel("Beverage")
+                    beverageGrid
+                }
                 .padding(.horizontal, 18)
+                .padding(.top, 20)
                 .padding(.bottom, 20)
 
-            // Beverage picker
-            VStack(alignment: .leading, spacing: 10) {
-                sectionLabel("Beverage")
-                beverageGrid
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 20)
-
-            // Amount picker
-            VStack(alignment: .leading, spacing: 10) {
-                sectionLabel("Amount")
-                presetRow
-                customInput
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 14)
-
-            // Effective hydration note
-            if selectedBeverage.hydrationCoefficient < 1 && canLog {
-                hydrationNote
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 14)
-            }
-
-            // Log button
-            logButton
+                // Amount picker
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionLabel("Amount")
+                    presetRow
+                    customInput
+                }
                 .padding(.horizontal, 18)
-                .padding(.bottom, 48)
+                .padding(.bottom, 14)
+
+                // Effective hydration note
+                if selectedBeverage.hydrationCoefficient < 1 && canLog {
+                    hydrationNote
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 14)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .navigationTitle("Log Intake")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(canLog ? "Log \(Int(amountMl)) ml" : "Log") {
+                        guard canLog else { return }
+                        let date = Date.now
+                        Task {
+                            await viewModel.logIntake(
+                                date: date,
+                                amountMl: amountMl,
+                                beverageType: selectedBeverage,
+                                context: modelContext
+                            )
+                            dismiss()
+                        }
+                    }
+                    .disabled(!canLog)
+                    .fontWeight(.semibold)
+                }
+            }
         }
-        .background { sheetBackground }
     }
 
     // MARK: - Beverage grid
@@ -102,24 +99,17 @@ struct LogEntryView: View {
                         BevDotView(bevType: bev, size: 30, emojiMode: emojiMode)
                         Text(String(localized: bev.displayName))
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(sel ? bev.accentColor : Color.white.opacity(0.52))
+                            .foregroundStyle(sel ? bev.accentColor : Color.secondary)
                         Text("×\(bev.hydrationCoefficient, specifier: "%.2g")")
                             .font(.system(size: 9))
-                            .foregroundStyle(.white.opacity(bev.hydrationCoefficient < 1 ? 0.28 : 0))
+                            .foregroundStyle(.secondary.opacity(bev.hydrationCoefficient < 1 ? 1 : 0))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 11)
                     .padding(.horizontal, 6)
                     .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(sel ? bev.accentColor.opacity(0.12) : Color.white.opacity(0.05))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .strokeBorder(
-                                        sel ? bev.accentColor.opacity(0.31) : Color.white.opacity(0.10),
-                                        lineWidth: 0.5
-                                    )
-                            )
+                        sel ? bev.accentColor.opacity(0.15) : Color.secondary.opacity(0.1),
+                        in: RoundedRectangle(cornerRadius: 12)
                     )
                     .shadow(color: sel ? bev.accentColor.opacity(0.1) : .clear, radius: 7)
                     .animation(.easeInOut(duration: 0.15), value: selectedBeverage)
@@ -142,19 +132,12 @@ struct LogEntryView: View {
                 } label: {
                     Text("\(Int(preset.amountMl))")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(sel ? Color.iosBlue : Color.white.opacity(0.6))
+                        .foregroundStyle(sel ? Color.iosBlue : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 42)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(sel ? Color.iosBlue.opacity(0.22) : Color.white.opacity(0.06))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .strokeBorder(
-                                            sel ? Color.iosBlue.opacity(0.45) : Color.white.opacity(0.10),
-                                            lineWidth: 0.5
-                                        )
-                                )
+                            sel ? Color.iosBlue.opacity(0.15) : Color.secondary.opacity(0.1),
+                            in: RoundedRectangle(cornerRadius: 12)
                         )
                         .animation(.easeInOut(duration: 0.14), value: sel)
                 }
@@ -169,7 +152,7 @@ struct LogEntryView: View {
         HStack(spacing: 8) {
             Text("Custom:")
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.38))
+                .foregroundStyle(.secondary)
 
             TextField("e.g. 400", text: $customAmountText)
                 .keyboardType(.numberPad)
@@ -181,20 +164,13 @@ struct LogEntryView: View {
 
             Text("ml")
                 .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.38))
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(useCustomAmount ? Color.iosBlue.opacity(0.10) : Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(
-                            useCustomAmount ? Color.iosBlue.opacity(0.30) : Color.white.opacity(0.09),
-                            lineWidth: 0.5
-                        )
-                )
+            useCustomAmount ? Color.iosBlue.opacity(0.10) : Color.secondary.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 12)
         )
     }
 
@@ -204,94 +180,17 @@ struct LogEntryView: View {
         HStack {
             Text("Effective hydration")
                 .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.42))
+                .foregroundStyle(.secondary)
             Spacer()
             Text("\(effectiveMl) ml")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white.opacity(0.82))
             + Text("  (\(Int(selectedBeverage.hydrationCoefficient * 100))%)")
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.32))
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.04))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
-                )
-        )
-    }
-
-    // MARK: - Log button
-
-    private var logButton: some View {
-        Button {
-            guard canLog else { return }
-            let date = Date.now
-            Task {
-                await viewModel.logIntake(
-                    date: date,
-                    amountMl: amountMl,
-                    beverageType: selectedBeverage,
-                    context: modelContext
-                )
-                dismiss()
-            }
-        } label: {
-            Text(canLog ? "Log \(Int(amountMl)) ml" : "Log Entry")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(canLog ? .white : .white.opacity(0.3))
-                .kerning(-0.3)
-                .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background {
-                    if canLog {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color(hex: "5dbeff"), Color.iosBlueDark],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .strokeBorder(.white.opacity(0.22), lineWidth: 0.5)
-                                    .padding(1)
-                            )
-                            .shadow(color: Color.iosBlue.opacity(0.32), radius: 10, y: 4)
-                    } else {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.white.opacity(0.08))
-                    }
-                }
-        }
-        .disabled(!canLog)
-        .animation(.easeInOut(duration: 0.18), value: canLog)
-    }
-
-    // MARK: - Sheet background
-
-    private var sheetBackground: some View {
-        ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: 30)
-                .fill(Color(hex: "090e1c").opacity(0.97))
-            // Top shine
-            LinearGradient(
-                colors: [.white.opacity(0.05), .clear],
-                startPoint: .top, endPoint: .bottom
-            )
-            .frame(height: 80)
-            .clipShape(RoundedRectangle(cornerRadius: 30))
-            // Border
-            RoundedRectangle(cornerRadius: 30)
-                .strokeBorder(Color.white.opacity(0.13), lineWidth: 0.5)
-        }
-        .shadow(color: .black.opacity(0.65), radius: 25, y: -10)
-        .ignoresSafeArea(edges: .bottom)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Helpers
@@ -299,7 +198,7 @@ struct LogEntryView: View {
     private func sectionLabel(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(.white.opacity(0.4))
+            .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .kerning(0.9)
     }
