@@ -182,11 +182,8 @@ struct LogEntryView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
             Spacer()
-            Text("\(effectiveMl) ml")
+            Text("\(effectiveMl) ml  (\(Int(selectedBeverage.hydrationCoefficient * 100))%)")
                 .font(.system(size: 14, weight: .bold))
-            + Text("  (\(Int(selectedBeverage.hydrationCoefficient * 100))%)")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

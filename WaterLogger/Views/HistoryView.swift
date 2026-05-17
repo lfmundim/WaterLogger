@@ -82,7 +82,7 @@ struct HistoryView: View {
                     .foregroundStyle(.secondary)
             }
 
-            let maxV = max((viewModel.daySummaries.map(\.effectiveMl).max() ?? 0), viewModel.goalMl)
+            let _ = max((viewModel.daySummaries.map(\.effectiveMl).max() ?? 0), viewModel.goalMl)
             let today = Calendar.current.startOfDay(for: .now)
 
             Chart {

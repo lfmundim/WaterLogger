@@ -119,11 +119,9 @@ struct TodayView: View {
                         Image(systemName: "bell.fill")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                        Group {
-                            Text("Next in ") + Text("\(mins) min").foregroundColor(Color.iosBlue)
-                        }
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        Text("Next in \(mins) min")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
@@ -140,13 +138,8 @@ struct TodayView: View {
                     .padding(.vertical, 8)
                     .background(.regularMaterial, in: Capsule())
             } else {
-                (
-                    Text("\(Int(viewModel.remainingMl)) ")
-                        .fontWeight(.bold)
-                    + Text("ml remaining")
-                        .foregroundColor(.secondary)
-                )
-                .font(.system(size: 13, weight: .medium))
+                Text("\(Int(viewModel.remainingMl)) ml remaining")
+                    .font(.system(size: 13, weight: .medium))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(.regularMaterial, in: Capsule())
