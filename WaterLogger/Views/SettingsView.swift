@@ -68,8 +68,15 @@ struct SettingsView: View {
                     }
                 }
 
-                // MARK: Version footer
-                Section {
+                // MARK: About
+                Section("About") {
+                    Link(destination: URL(string: "https://pubmed.ncbi.nlm.nih.gov/26702122/")!) {
+                        LabeledContent("Hydration coefficients source") {
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     LabeledContent("WaterLogger") {
                         Text(appVersion)
                             .foregroundStyle(.secondary)
