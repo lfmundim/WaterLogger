@@ -10,6 +10,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+		<string>healthkit</string>
 	</array>
 	<key>NSHealthShareUsageDescription</key>
 	<string>WaterLogger reads your water intake data from Health to keep your progress in sync across apps and devices.</string>
