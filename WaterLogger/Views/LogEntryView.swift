@@ -4,155 +4,202 @@ import SwiftData
 struct LogEntryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-
     var viewModel: TodayViewModel
-    var settings: AppSettings
 
     @State private var selectedBeverage: BeverageType = .water
-    @State private var selectedPresetMl: Double? = 250
+    @State private var selectedPresetMl: Double = 250
     @State private var customAmountText: String = ""
     @State private var useCustomAmount = false
-    @State private var isToday = true
-    @State private var entryDate = Date()
+    @FocusState private var customFieldFocused: Bool
+
+    private var emojiMode: Bool { viewModel.settings.emojiMode }
 
     private var amountMl: Double {
-        if useCustomAmount {
-            return Double(customAmountText) ?? 0
-        }
-        return selectedPresetMl ?? 0
+        useCustomAmount ? (Double(customAmountText) ?? 0) : selectedPresetMl
+    }
+
+    private var effectiveMl: Int {
+        Int(amountMl * selectedBeverage.hydrationCoefficient)
+    }
+
+    private var canLog: Bool { amountMl > 0 }
+
+    // Quick-amount presets from settings (falls back to defaults)
+    private var presets: [ContainerPreset] {
+        viewModel.settings.containerPresets.isEmpty
+            ? ContainerPreset.defaults
+            : viewModel.settings.containerPresets
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section(String(localized: "Beverage")) {
-                    beveragePicker
+            VStack(alignment: .leading, spacing: 0) {
+                // Beverage picker
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionLabel("Beverage")
+                    beverageGrid
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, 20)
+                .padding(.bottom, 20)
+
+                // Amount picker
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionLabel("Amount")
+                    presetRow
+                    customInput
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 14)
+
+                // Effective hydration note
+                if selectedBeverage.hydrationCoefficient < 1 && canLog {
+                    hydrationNote
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 14)
                 }
 
-                Section(String(localized: "Amount")) {
-                    presetGrid
-                    Toggle(String(localized: "Custom amount"), isOn: $useCustomAmount)
-                    if useCustomAmount {
-                        HStack {
-                            TextField(String(localized: "ml"), text: $customAmountText)
-                                .keyboardType(.numberPad)
-                            Text("ml").foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                
-                Section(String(localized: "Date & Time")) {
-                    Toggle(String(localized: "Today"), isOn: $isToday)
-                    if !isToday {
-                        HStack {
-                            DatePicker(String(localized: "Date"), selection: $entryDate, displayedComponents: [.date, .hourAndMinute])
-                        }
-                    }
-                }
-
-                Section {
-                    Button(action: confirm) {
-                        Label(String(localized: "Log intake"), systemImage: "checkmark.circle.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .disabled(amountMl <= 0)
-                }
+                Spacer(minLength: 0)
             }
-            .navigationTitle(String(localized: "Log Water"))
+            .navigationTitle("Log Intake")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "Cancel")) { dismiss() }
+                    Button("Cancel") { dismiss() }
                 }
-            }
-        }
-    }
-
-    // MARK: - Subviews
-
-    private var beveragePicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(BeverageType.allCases, id: \.self) { type in
-                    VStack(spacing: 4) {
-                        Image(systemName: type.systemImage)
-                            .font(.title2)
-                        Text(type.displayName)
-                            .font(.caption2)
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(canLog ? "Log \(Int(amountMl)) ml" : "Log") {
+                        guard canLog else { return }
+                        let date = Date.now
+                        Task {
+                            await viewModel.logIntake(
+                                date: date,
+                                amountMl: amountMl,
+                                beverageType: selectedBeverage,
+                                context: modelContext
+                            )
+                            dismiss()
+                        }
                     }
-                    .padding(10)
-                    .background(
-                        selectedBeverage == type
-                        ? Color.accentColor.opacity(0.2)
-                        : Color(.secondarySystemGroupedBackground)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(selectedBeverage == type ? Color.accentColor : .clear, lineWidth: 2)
-                    )
-                    .onTapGesture { selectedBeverage = type }
+                    .disabled(!canLog)
+                    .fontWeight(.semibold)
                 }
             }
-            .padding(.vertical, 4)
         }
     }
 
-    private var presetGrid: some View {
-        let allPresets = settings.containerPresets.isEmpty
-            ? ContainerPreset.defaults
-            : settings.containerPresets
+    // MARK: - Beverage grid
 
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: 10) {
-            ForEach(allPresets, id: \.amountMl) { preset in
-                Button {
-                    selectedPresetMl = preset.amountMl
-                    useCustomAmount = false
-                } label: {
-                    VStack(spacing: 2) {
-                        Text("\(Int(preset.amountMl))")
-                            .font(.headline)
-                        Text("ml").font(.caption2)
-                        Text(preset.name).font(.caption2).foregroundStyle(.secondary)
+    private var beverageGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+            ForEach(BeverageType.allCases, id: \.self) { bev in
+                let sel = selectedBeverage == bev
+                Button { selectedBeverage = bev } label: {
+                    VStack(spacing: 7) {
+                        BevDotView(bevType: bev, size: 30, emojiMode: emojiMode)
+                        Text(String(localized: bev.displayName))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(sel ? bev.accentColor : Color.secondary)
+                        Text("×\(bev.hydrationCoefficient, specifier: "%.2g")")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary.opacity(bev.hydrationCoefficient < 1 ? 1 : 0))
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 11)
+                    .padding(.horizontal, 6)
                     .background(
-                        selectedPresetMl == preset.amountMl && !useCustomAmount
-                        ? Color.accentColor.opacity(0.2)
-                        : Color(.secondarySystemGroupedBackground)
+                        sel ? bev.accentColor.opacity(0.15) : Color.secondary.opacity(0.1),
+                        in: RoundedRectangle(cornerRadius: 12)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(
-                                selectedPresetMl == preset.amountMl && !useCustomAmount
-                                ? Color.accentColor : .clear,
-                                lineWidth: 2
-                            )
-                    )
+                    .shadow(color: sel ? bev.accentColor.opacity(0.1) : .clear, radius: 7)
+                    .animation(.easeInOut(duration: 0.15), value: selectedBeverage)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.vertical, 4)
     }
 
-    // MARK: - Actions
+    // MARK: - Amount presets
 
-    private func confirm() {
-        guard amountMl > 0 else { return }
-        // Use the current time when logging today so the timestamp reflects when the
-        // user actually tapped confirm, not when the sheet was first opened.
-        let date = isToday ? Date.now : entryDate
-        Task {
-            await viewModel.logIntake(
-                date: date,
-                amountMl: amountMl,
-                beverageType: selectedBeverage,
-                context: modelContext
-            )
-            dismiss()
+    private var presetRow: some View {
+        HStack(spacing: 7) {
+            ForEach(presets.prefix(4), id: \.amountMl) { preset in
+                let sel = !useCustomAmount && selectedPresetMl == preset.amountMl
+                Button {
+                    selectedPresetMl = preset.amountMl
+                    useCustomAmount = false
+                    customFieldFocused = false
+                } label: {
+                    Text("\(Int(preset.amountMl))")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(sel ? Color.iosBlue : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                        .background(
+                            sel ? Color.iosBlue.opacity(0.15) : Color.secondary.opacity(0.1),
+                            in: RoundedRectangle(cornerRadius: 12)
+                        )
+                        .animation(.easeInOut(duration: 0.14), value: sel)
+                }
+                .buttonStyle(.plain)
+            }
         }
+    }
+
+    // MARK: - Custom input
+
+    private var customInput: some View {
+        HStack(spacing: 8) {
+            Text("Custom:")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+
+            TextField("e.g. 400", text: $customAmountText)
+                .keyboardType(.numberPad)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.iosBlue)
+                .focused($customFieldFocused)
+                .onChange(of: customAmountText) { _, _ in useCustomAmount = true }
+                .onSubmit { if customAmountText.isEmpty { useCustomAmount = false } }
+
+            Text("ml")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            useCustomAmount ? Color.iosBlue.opacity(0.10) : Color.secondary.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
+    }
+
+    // MARK: - Effective hydration note
+
+    private var hydrationNote: some View {
+        HStack {
+            Text("Effective hydration")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("\(effectiveMl) ml")
+                .font(.system(size: 14, weight: .bold))
+            + Text("  (\(Int(selectedBeverage.hydrationCoefficient * 100))%)")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Helpers
+
+    private func sectionLabel(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .kerning(0.9)
     }
 }

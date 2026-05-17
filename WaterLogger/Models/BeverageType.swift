@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// The category of a logged drink.
 ///
@@ -49,6 +50,42 @@ enum BeverageType: String, Codable, CaseIterable {
         case .soda:      return "bubbles.and.sparkles.fill"
         case .coffee:    return "mug.fill"
         case .alcohol:   return "wineglass.fill"
+        }
+    }
+
+    /// Emoji representation used when emoji labels mode is enabled.
+    var emoji: String {
+        switch self {
+        case .water:     return "💧"
+        case .herbalTea: return "🍵"
+        case .juice:     return "🍊"
+        case .soda:      return "🥤"
+        case .coffee:    return "☕"
+        case .alcohol:   return "🍷"
+        }
+    }
+
+    /// Single-character initial shown in the beverage dot when emoji mode is off.
+    var initial: String {
+        switch self {
+        case .water:     return "W"
+        case .herbalTea: return "T"
+        case .juice:     return "J"
+        case .soda:      return "S"
+        case .coffee:    return "C"
+        case .alcohol:   return "A"
+        }
+    }
+
+    /// Brand color for the beverage dot and selection highlights.
+    var accentColor: Color {
+        switch self {
+        case .water:     return Color(hex: "3b9eff")
+        case .herbalTea: return Color(hex: "34d399")
+        case .juice:     return Color(hex: "fbbf24")
+        case .soda:      return Color(hex: "86efac")
+        case .coffee:    return Color(hex: "d4845a")
+        case .alcohol:   return Color(hex: "fb7185")
         }
     }
 }

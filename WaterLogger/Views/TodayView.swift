@@ -3,168 +3,208 @@ import SwiftData
 
 struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var viewModel = TodayViewModel()
-    @State private var showingLogEntry = false
+    @Environment(TodayViewModel.self) private var viewModel
+    @State private var entryToDelete: IntakeEntry?
+    @State private var showLog = false
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    progressSection
-                    entryList
+            List {
+                // MARK: Progress ring section
+                Section {
+                    ProgressRingView(
+                        progress: viewModel.progress,
+                        consumed: Int(viewModel.totalEffectiveMl),
+                        goal: Int(viewModel.settings.dailyGoalMl)
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+
+                    // Status chips below the ring
+                    statusChips
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
-                .padding()
+
+                // MARK: Intake log section
+                Section {
+                    if viewModel.entries.isEmpty {
+                        emptyState
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(viewModel.entries) { entry in
+                            entryRow(entry)
+                        }
+                        .onDelete { offsets in
+                            // Map offsets to entries for deletion
+                            for idx in offsets {
+                                let entry = viewModel.entries[idx]
+                                entryToDelete = entry
+                            }
+                        }
+                    }
+                } header: {
+                    let count = viewModel.entries.count
+                    Text("Intake Log · \(count) \(count == 1 ? "entry" : "entries")")
+                }
+
+                // MARK: Remaining section (only when there are entries)
+                if !viewModel.entries.isEmpty {
+                    Section {
+                        LabeledContent("Remaining today") {
+                            Text(viewModel.remainingMl > 0
+                                 ? "\(Int(viewModel.remainingMl)) ml"
+                                 : "Done!")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(viewModel.remainingMl > 0 ? Color.iosBlue : Color(hex: "34d399"))
+                        }
+                    }
+                }
             }
-            .navigationTitle(String(localized: "Today"))
+            .listStyle(.insetGrouped)
+            .navigationTitle("Today")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button {
-                        showingLogEntry = true
+                        showLog = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+                            .font(.system(size: 22))
                     }
                 }
             }
-            .sheet(isPresented: $showingLogEntry) {
-                LogEntryView(viewModel: viewModel, settings: viewModel.settings)
+            .task { await viewModel.load(context: modelContext) }
+            .refreshable { await viewModel.load(context: modelContext) }
+            .sheet(isPresented: $showLog) {
+                LogEntryView(viewModel: viewModel)
+                    .presentationDetents([.height(580)])
+                    .presentationCornerRadius(30)
+                    .presentationBackground(Color(hex: "090e1c"))
             }
-            .task {
-                await viewModel.load(context: modelContext)
-            }
-            .refreshable {
-                await viewModel.load(context: modelContext)
+            .alert(
+                "Delete Entry?",
+                isPresented: Binding(
+                    get: { entryToDelete != nil },
+                    set: { if !$0 { entryToDelete = nil } }
+                )
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let entry = entryToDelete {
+                        Task { await viewModel.deleteEntry(entry, context: modelContext) }
+                    }
+                    entryToDelete = nil
+                }
+                Button("Cancel", role: .cancel) { entryToDelete = nil }
+            } message: {
+                if let entry = entryToDelete {
+                    Text("\(Int(entry.amountMl)) ml · \(String(localized: entry.beverageType.displayName))")
+                }
             }
         }
     }
 
-    // MARK: - Subviews
+    // MARK: - Status chips
 
-    private var progressSection: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .stroke(Color(.systemFill), lineWidth: 16)
-                Circle()
-                    .trim(from: 0, to: viewModel.progress)
-                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 16, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.5), value: viewModel.progress)
-
-                VStack(spacing: 4) {
-                    Text("\(Int(viewModel.totalEffectiveMl))")
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                    Text("/ \(Int(viewModel.settings.dailyGoalMl)) ml")
-                        .font(.subheadline)
+    private var statusChips: some View {
+        HStack(spacing: 8) {
+            // Next reminder chip
+            if let date = viewModel.nextReminderDate {
+                let mins = max(Int(date.timeIntervalSinceNow / 60), 0)
+                if mins > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Group {
+                            Text("Next in ") + Text("\(mins) min").foregroundColor(Color.iosBlue)
+                        }
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 200, height: 200)
-
-            HStack(spacing: 24) {
-                statCard(
-                    title: String(localized: "Remaining"),
-                    value: "\(Int(viewModel.remainingMl)) ml",
-                    icon: "drop"
-                )
-                statCard(
-                    title: String(localized: "Next reminder"),
-                    value: nextReminderText,
-                    icon: "bell"
-                )
-            }
-        }
-    }
-
-    private var nextReminderText: String {
-        guard let date = viewModel.nextReminderDate else {
-            return String(localized: "—")
-        }
-        return date.formatted(.dateTime.hour().minute())
-    }
-
-    private func statCard(title: String, value: String, icon: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.headline)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var entryList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Today's Entries")
-                .font(.headline)
-                .padding(.horizontal, 4)
-
-            if viewModel.entries.isEmpty {
-                Text("No entries yet. Tap + to log your first drink!")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(viewModel.entries) { entry in
-                        entryRow(entry)
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    Task {
-                                        await viewModel.deleteEntry(entry, context: modelContext)
-                                    }
-                                } label: {
-                                    Label(String(localized: "Delete"), systemImage: "trash")
-                                }
-                            }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
                 }
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            // Remaining / goal-reached chip
+            if viewModel.remainingMl == 0 {
+                Text("Goal reached!")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(hex: "34d399"))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+            } else {
+                (
+                    Text("\(Int(viewModel.remainingMl)) ")
+                        .fontWeight(.bold)
+                    + Text("ml remaining")
+                        .foregroundColor(.secondary)
+                )
+                .font(.system(size: 13, weight: .medium))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.regularMaterial, in: Capsule())
             }
         }
+        .padding(.bottom, 4)
     }
+
+    // MARK: - Empty state
+
+    private var emptyState: some View {
+        VStack(spacing: 6) {
+            Text("Nothing logged yet.")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+            Text("Tap + to log your first drink")
+                .font(.system(size: 15))
+                .foregroundStyle(Color.iosBlue.opacity(0.8))
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+    }
+
+    // MARK: - Entry row
 
     private func entryRow(_ entry: IntakeEntry) -> some View {
-        HStack {
-            Image(systemName: entry.beverageType.systemImage)
-                .foregroundStyle(.tint)
-                .frame(width: 28)
-
+        HStack(spacing: 12) {
+            BevDotView(
+                bevType: entry.beverageType,
+                size: 36,
+                emojiMode: viewModel.settings.emojiMode
+            )
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.beverageType.displayName)
-                    .font(.subheadline)
-                Text(entry.date, style: .time)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(Int(entry.amountMl)) ml")
-                    .font(.subheadline).bold()
+                Text(String(localized: entry.beverageType.displayName))
+                    .font(.body.weight(.medium))
                 if entry.beverageType.hydrationCoefficient < 1 {
-                    Text("≈ \(Int(entry.effectiveMl)) ml effective")
+                    Text("\(Int(entry.effectiveMl)) ml effective")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(entry.amountMl)) ml")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.iosBlue)
+                Text(entry.date, style: .time)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
+        .padding(.vertical, 4)
     }
 }
 
 #Preview {
     TodayView()
+        .environment(TodayViewModel())
         .modelContainer(for: [IntakeEntry.self, AppSettings.self], inMemory: true)
 }

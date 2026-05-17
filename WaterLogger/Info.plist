@@ -2,9 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+		<string>healthkit</string>
 	</array>
 	<key>NSHealthShareUsageDescription</key>
 	<string>WaterLogger reads your water intake data from Health to keep your progress in sync across apps and devices.</string>

@@ -95,10 +95,22 @@ actor HealthKitService {
     ///   written to HealthKit today. Returns an empty array if HealthKit is
     ///   unavailable or the query fails.
     func fetchTodayEntries() async -> [(uuid: UUID, amountMl: Double, date: Date)] {
+        let startOfDay = Calendar.current.startOfDay(for: .now)
+        return await fetchEntries(from: startOfDay, to: .now)
+    }
+
+    /// Fetch all dietaryWater samples in a date range.
+    ///
+    /// Used to import historical entries when the user first opens the app, allowing
+    /// carry-over from other apps (e.g. Apple Watch, third-party trackers).
+    ///
+    /// - Parameters:
+    ///   - start: Inclusive range start.
+    ///   - end: Inclusive range end.
+    /// - Returns: Tuples of (uuid, amountMl, date), empty if HealthKit is unavailable or fails.
+    func fetchEntries(from start: Date, to end: Date) async -> [(uuid: UUID, amountMl: Double, date: Date)] {
         guard isAvailable else { return [] }
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: .now)
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: .now)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
         do {
             let samples = try await querySamples(predicate: predicate, limit: HKObjectQueryNoLimit)
             return samples.map { sample in

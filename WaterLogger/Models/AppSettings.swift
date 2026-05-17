@@ -15,6 +15,8 @@ final class AppSettings {
     var windowEndMinutes: Int
     /// User-defined container presets shown in the log-entry sheet.
     var containerPresets: [ContainerPreset]
+    /// When true, beverage dots show emoji glyphs instead of letter initials.
+    var emojiMode: Bool
 
     /// Creates a new settings record.
     ///
@@ -23,16 +25,19 @@ final class AppSettings {
     ///   - windowStartMinutes: Minutes after midnight when the reminder window opens. Defaults to 480 (08:00).
     ///   - windowEndMinutes: Minutes after midnight when the reminder window closes. Defaults to 1320 (22:00).
     ///   - containerPresets: Quick-select amounts shown when logging intake.
+    ///   - emojiMode: Whether to show emoji instead of letter initials in beverage dots.
     init(
         dailyGoalMl: Double = 2000,
         windowStartMinutes: Int = 8 * 60,
         windowEndMinutes: Int = 22 * 60,
-        containerPresets: [ContainerPreset] = ContainerPreset.defaults
+        containerPresets: [ContainerPreset] = ContainerPreset.defaults,
+        emojiMode: Bool = false
     ) {
         self.dailyGoalMl = dailyGoalMl
         self.windowStartMinutes = windowStartMinutes
         self.windowEndMinutes = windowEndMinutes
         self.containerPresets = containerPresets
+        self.emojiMode = emojiMode
     }
 
     /// A `Date` representing the window start time on the current calendar day.
@@ -72,7 +77,9 @@ final class AppSettings {
 ///
 /// `ContainerPreset` is stored as a `Codable` array inside `AppSettings`,
 /// so it does not need its own SwiftData `@Model`.
-struct ContainerPreset: Codable, Equatable {
+struct ContainerPreset: Codable, Equatable, Identifiable {
+    /// Stable identity for drag-and-drop reordering; defaults to a new UUID on creation.
+    var id: UUID = UUID()
     /// Human-readable label shown on the preset button (e.g. "Glass").
     var name: String
     /// Volume of the container in millilitres (e.g. 250).
