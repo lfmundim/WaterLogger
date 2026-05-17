@@ -7,74 +7,53 @@ struct HistoryView: View {
     @State private var viewModel = HistoryViewModel()
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                // Header
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("History")
-                            .font(.system(size: 34, weight: .bold))
-                            .foregroundStyle(.white)
-                            .kerning(0.2)
-                        Text(weekRangeLabel)
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    // Bar chart
+                    chartCard
+                        .padding(.bottom, 4)
 
-                    Spacer()
+                    // Stat cards
+                    statsRow
 
-                    HStack(spacing: 4) {
-                        Button {
-                            Task { await viewModel.stepWeek(by: -1, context: modelContext) }
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.7))
-                                .frame(width: 32, height: 32)
-                                .glassCard(cornerRadius: 99)
-                        }
-                        .buttonStyle(.plain)
+                    // Beverage breakdown
+                    breakdownCard
+                        .padding(.top, 4)
 
-                        Button {
-                            Task { await viewModel.stepWeek(by: 1, context: modelContext) }
-                        } label: {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(viewModel.weekOffset == 0
-                                    ? .white.opacity(0.2)
-                                    : .white.opacity(0.7))
-                                .frame(width: 32, height: 32)
-                                .glassCard(cornerRadius: 99)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(viewModel.weekOffset == 0)
+                    // Day detail (when a bar is tapped)
+                    if viewModel.selectedDate != nil {
+                        dayDetailCard
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
-                .padding(.bottom, 10)
-
-                // Bar chart
-                chartCard
-                    .padding(.bottom, 12)
-
-                // Stat cards
-                statsRow
-
-                // Beverage breakdown
-                breakdownCard
-                    .padding(.top, 4)
-
-                // Day detail (when a bar is tapped)
-                if viewModel.selectedDate != nil {
-                    dayDetailCard
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+                .animation(.easeInOut(duration: 0.25), value: viewModel.selectedDate)
+            }
+            .scrollIndicators(.hidden)
+            .navigationTitle("History")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        Task { await viewModel.stepWeek(by: -1, context: modelContext) }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        Task { await viewModel.stepWeek(by: 1, context: modelContext) }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                    }
+                    .disabled(viewModel.weekOffset == 0)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
-            .animation(.easeInOut(duration: 0.25), value: viewModel.selectedDate)
+            .task { await viewModel.load(context: modelContext) }
         }
-        .scrollIndicators(.hidden)
-        .task { await viewModel.load(context: modelContext) }
     }
 
     // MARK: - Week range label
@@ -92,11 +71,16 @@ struct HistoryView: View {
 
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("7-Day Overview")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white.opacity(0.4))
-                .textCase(.uppercase)
-                .kerning(0.9)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("7-Day Overview")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .kerning(0.9)
+                Text(weekRangeLabel)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
 
             let maxV = max((viewModel.daySummaries.map(\.effectiveMl).max() ?? 0), viewModel.goalMl)
             let today = Calendar.current.startOfDay(for: .now)
@@ -169,7 +153,7 @@ struct HistoryView: View {
             .padding(.bottom, 4)
         }
         .padding(18)
-        .glassCard()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
     // MARK: - Stat cards
@@ -191,18 +175,18 @@ struct HistoryView: View {
                 VStack(spacing: 4) {
                     Text(s.value)
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(s.accent ? Color.iosBlue : .white)
+                        .foregroundStyle(s.accent ? Color.iosBlue : .primary)
                         .kerning(-0.5)
                     Text(s.label)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.38))
+                        .foregroundStyle(.secondary)
                         .textCase(.uppercase)
                         .kerning(0.7)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .padding(.horizontal, 8)
-                .glassCard()
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
         }
     }
@@ -225,14 +209,14 @@ struct HistoryView: View {
         return VStack(alignment: .leading, spacing: 14) {
             Text("This Week")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .kerning(0.9)
 
             if sorted.isEmpty {
                 Text("No data yet.")
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(.secondary)
             } else {
                 ForEach(sorted, id: \.key) { bev, ml in
                     let pct = grandTotal > 0 ? ml / grandTotal : 0
@@ -240,7 +224,7 @@ struct HistoryView: View {
                         BevDotView(bevType: bev, size: 22, emojiMode: viewModel.emojiMode)
                         Text(String(localized: bev.displayName))
                             .font(.system(size: 13))
-                            .foregroundStyle(.white.opacity(0.72))
+                            .foregroundStyle(.secondary)
                             .frame(width: 64, alignment: .leading)
 
                         GeometryReader { geo in
@@ -257,7 +241,7 @@ struct HistoryView: View {
 
                         Text("\(Int(pct * 100))%")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.4))
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .fixedSize()
                             .frame(width: 38, alignment: .trailing)
@@ -266,7 +250,7 @@ struct HistoryView: View {
             }
         }
         .padding(16)
-        .glassCard()
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
 
     // MARK: - Day detail
@@ -278,12 +262,10 @@ struct HistoryView: View {
                 HStack {
                     Text(date, format: .dateTime.weekday(.wide).month().day())
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
                     Spacer()
                     Button { withAnimation { viewModel.selectedDate = nil } } label: {
-                        Text("×")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.white.opacity(0.4))
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                 }
@@ -291,7 +273,7 @@ struct HistoryView: View {
                 if viewModel.selectedDayEntries.isEmpty {
                     Text("No entries for this day.")
                         .font(.system(size: 14))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(.secondary)
                 } else {
                     ForEach(viewModel.selectedDayEntries) { entry in
                         HStack(spacing: 10) {
@@ -299,30 +281,25 @@ struct HistoryView: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(String(localized: entry.beverageType.displayName))
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(.white)
                                 Text(entry.date, style: .time)
                                     .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.4))
+                                    .foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text("\(Int(entry.amountMl)) ml")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(.white)
                         }
                         .padding(.vertical, 4)
                     }
                 }
             }
             .padding(16)
-            .glassCard()
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         }
     }
 }
 
 #Preview {
-    ZStack {
-        AppBackground()
-        HistoryView()
-    }
-    .modelContainer(for: [IntakeEntry.self, AppSettings.self], inMemory: true)
+    HistoryView()
+        .modelContainer(for: [IntakeEntry.self, AppSettings.self], inMemory: true)
 }

@@ -76,8 +76,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(AppBackground())
             .navigationTitle("Settings")
             .toolbar {
                 EditButton()

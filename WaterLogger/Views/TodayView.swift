@@ -8,92 +8,102 @@ struct TodayView: View {
     @State private var showLog = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                headerRow
-                    .padding(.bottom, 28)
-
-                ProgressRingView(
-                    progress: viewModel.progress,
-                    consumed: Int(viewModel.totalEffectiveMl),
-                    goal: Int(viewModel.settings.dailyGoalMl)
-                )
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 28)
-
-                statusChips
+        NavigationStack {
+            List {
+                // MARK: Progress ring section
+                Section {
+                    ProgressRingView(
+                        progress: viewModel.progress,
+                        consumed: Int(viewModel.totalEffectiveMl),
+                        goal: Int(viewModel.settings.dailyGoalMl)
+                    )
                     .frame(maxWidth: .infinity)
-                    .padding(.bottom, 36)
+                    .padding(.vertical, 12)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
 
-                intakeLogSection
+                    // Status chips below the ring
+                    statusChips
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+
+                // MARK: Intake log section
+                Section {
+                    if viewModel.entries.isEmpty {
+                        emptyState
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(viewModel.entries) { entry in
+                            entryRow(entry)
+                        }
+                        .onDelete { offsets in
+                            // Map offsets to entries for deletion
+                            for idx in offsets {
+                                let entry = viewModel.entries[idx]
+                                entryToDelete = entry
+                            }
+                        }
+                    }
+                } header: {
+                    let count = viewModel.entries.count
+                    Text("Intake Log · \(count) \(count == 1 ? "entry" : "entries")")
+                }
+
+                // MARK: Remaining section (only when there are entries)
+                if !viewModel.entries.isEmpty {
+                    Section {
+                        LabeledContent("Remaining today") {
+                            Text(viewModel.remainingMl > 0
+                                 ? "\(Int(viewModel.remainingMl)) ml"
+                                 : "Done!")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(viewModel.remainingMl > 0 ? Color.iosBlue : Color(hex: "34d399"))
+                        }
+                    }
+                }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
-        }
-        .scrollIndicators(.hidden)
-        .task { await viewModel.load(context: modelContext) }
-        .refreshable { await viewModel.load(context: modelContext) }
-        .sheet(isPresented: $showLog) {
-            LogEntryView(viewModel: viewModel)
-                .presentationDetents([.height(580)])
-                .presentationCornerRadius(30)
-                .presentationBackground(Color(hex: "090e1c"))
-                .presentationDragIndicator(.hidden)
-        }
-        .alert(
-            "Delete Entry?",
-            isPresented: Binding(
-                get: { entryToDelete != nil },
-                set: { if !$0 { entryToDelete = nil } }
-            )
-        ) {
-            Button("Delete", role: .destructive) {
+            .listStyle(.insetGrouped)
+            .navigationTitle("Today")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showLog = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 22))
+                    }
+                }
+            }
+            .task { await viewModel.load(context: modelContext) }
+            .refreshable { await viewModel.load(context: modelContext) }
+            .sheet(isPresented: $showLog) {
+                LogEntryView(viewModel: viewModel)
+                    .presentationDetents([.height(580)])
+                    .presentationCornerRadius(30)
+                    .presentationBackground(Color(hex: "090e1c"))
+            }
+            .alert(
+                "Delete Entry?",
+                isPresented: Binding(
+                    get: { entryToDelete != nil },
+                    set: { if !$0 { entryToDelete = nil } }
+                )
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let entry = entryToDelete {
+                        Task { await viewModel.deleteEntry(entry, context: modelContext) }
+                    }
+                    entryToDelete = nil
+                }
+                Button("Cancel", role: .cancel) { entryToDelete = nil }
+            } message: {
                 if let entry = entryToDelete {
-                    Task { await viewModel.deleteEntry(entry, context: modelContext) }
-                }
-                entryToDelete = nil
-            }
-            Button("Cancel", role: .cancel) { entryToDelete = nil }
-        } message: {
-            if let entry = entryToDelete {
-                Text("\(Int(entry.amountMl)) ml · \(String(localized: entry.beverageType.displayName))")
-            }
-        }
-    }
-
-    // MARK: - Header
-
-    private var headerRow: some View {
-        HStack {
-            Text("Today")
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.white)
-                .kerning(0.2)
-
-            Spacer()
-
-            // Glass + button — Apple Calendar/Passwords style
-            Button { showLog = true } label: {
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            Circle()
-                                .fill(Color(red: 0.43, green: 0.43, blue: 0.47, opacity: 0.30))
-                        )
-                        .overlay(
-                            Circle()
-                                .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.5)
-                        )
-                        .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
-                        .frame(width: 36, height: 36)
-
-                    Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.92))
+                    Text("\(Int(entry.amountMl)) ml · \(String(localized: entry.beverageType.displayName))")
                 }
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -108,16 +118,16 @@ struct TodayView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "bell.fill")
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(.secondary)
                         Group {
-                            Text("Next in ") + Text("\(mins) min").foregroundColor(Color.iosBlue) + Text("")
+                            Text("Next in ") + Text("\(mins) min").foregroundColor(Color.iosBlue)
                         }
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.65))
+                        .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .glassCard(cornerRadius: 99)
+                    .background(.regularMaterial, in: Capsule())
                 }
             }
 
@@ -128,58 +138,30 @@ struct TodayView: View {
                     .foregroundStyle(Color(hex: "34d399"))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .glassCard(cornerRadius: 99, tint: Color(hex: "34d399"))
+                    .background(.regularMaterial, in: Capsule())
             } else {
                 (
                     Text("\(Int(viewModel.remainingMl)) ")
-                        .foregroundColor(.white)
                         .fontWeight(.bold)
                     + Text("ml remaining")
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(.secondary)
                 )
                 .font(.system(size: 13, weight: .medium))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .glassCard(cornerRadius: 99)
+                .background(.regularMaterial, in: Capsule())
             }
         }
+        .padding(.bottom, 4)
     }
 
-    // MARK: - Intake log
-
-    private var intakeLogSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Section header
-            HStack {
-                Text("Intake Log")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.4))
-                    .textCase(.uppercase)
-                    .kerning(0.9)
-
-                Spacer()
-
-                let count = viewModel.entries.count
-                Text("\(count) \(count == 1 ? "entry" : "entries")")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.3))
-            }
-            .padding(.horizontal, 2)
-
-            if viewModel.entries.isEmpty {
-                emptyState
-            } else {
-                entriesList
-                summaryCard
-            }
-        }
-    }
+    // MARK: - Empty state
 
     private var emptyState: some View {
         VStack(spacing: 6) {
             Text("Nothing logged yet.")
                 .font(.system(size: 15))
-                .foregroundStyle(.white.opacity(0.38))
+                .foregroundStyle(.secondary)
             Text("Tap + to log your first drink")
                 .font(.system(size: 15))
                 .foregroundStyle(Color.iosBlue.opacity(0.8))
@@ -187,91 +169,42 @@ struct TodayView: View {
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
-        .padding(.horizontal, 20)
-        .glassCard()
     }
 
-    private var entriesList: some View {
-        // Entries are already newest-first from the view model
-        VStack(spacing: 8) {
-            ForEach(viewModel.entries) { entry in
-                entryCard(entry)
-            }
-        }
-    }
+    // MARK: - Entry row
 
-    private var summaryCard: some View {
-        HStack {
-            Text("Remaining today")
-                .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.5))
-            Spacer()
-            Text(viewModel.remainingMl > 0
-                 ? "\(Int(viewModel.remainingMl)) ml"
-                 : "Done!")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(viewModel.remainingMl > 0 ? Color.iosBlue : Color(hex: "34d399"))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 13)
-        .glassCard()
-        .padding(.top, 2)
-    }
-
-    // MARK: - Entry card
-
-    private func entryCard(_ entry: IntakeEntry) -> some View {
+    private func entryRow(_ entry: IntakeEntry) -> some View {
         HStack(spacing: 12) {
             BevDotView(
                 bevType: entry.beverageType,
-                size: 38,
+                size: 36,
                 emojiMode: viewModel.settings.emojiMode
             )
-
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(String(localized: entry.beverageType.displayName))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                    Text("\(Int(entry.amountMl)) ml")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.42))
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(localized: entry.beverageType.displayName))
+                    .font(.body.weight(.medium))
                 if entry.beverageType.hydrationCoefficient < 1 {
-                    Text("\(Int(entry.effectiveMl)) ml effective (×\(entry.beverageType.hydrationCoefficient, specifier: "%.2g"))")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.32))
-                        .padding(.top, 1)
+                    Text("\(Int(entry.effectiveMl)) ml effective")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-
             Spacer()
-
-            VStack(alignment: .trailing, spacing: 5) {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(entry.amountMl)) ml")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.iosBlue)
                 Text(entry.date, style: .time)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.38))
-
-                Button { entryToDelete = entry } label: {
-                    Text("×")
-                        .font(.system(size: 17))
-                        .foregroundStyle(Color.red.opacity(0.45))
-                        .frame(width: 24, height: 20)
-                }
-                .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .glassCard(cornerRadius: 16)
+        .padding(.vertical, 4)
     }
 }
 
 #Preview {
-    ZStack {
-        AppBackground()
-        TodayView()
-            .environment(TodayViewModel())
-    }
-    .modelContainer(for: [IntakeEntry.self, AppSettings.self], inMemory: true)
+    TodayView()
+        .environment(TodayViewModel())
+        .modelContainer(for: [IntakeEntry.self, AppSettings.self], inMemory: true)
 }
